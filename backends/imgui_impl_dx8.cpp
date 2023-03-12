@@ -102,6 +102,7 @@ static void ImGui_ImplDX8_SetupRenderState(ImDrawData* draw_data)
     bd->pd3dDevice->SetRenderState(D3DRS_SPECULARENABLE, FALSE);
     bd->pd3dDevice->SetRenderState(D3DRS_STENCILENABLE, FALSE);
     bd->pd3dDevice->SetRenderState(D3DRS_CLIPPING, TRUE);
+    bd->pd3dDevice->SetRenderState(D3DRS_CLIPPLANEENABLE, D3DCLIPPLANE0 | D3DCLIPPLANE1 | D3DCLIPPLANE2 | D3DCLIPPLANE3);
     bd->pd3dDevice->SetRenderState(D3DRS_LIGHTING, FALSE);
     bd->pd3dDevice->SetTextureStageState(0, D3DTSS_COLOROP, D3DTOP_MODULATE);
     bd->pd3dDevice->SetTextureStageState(0, D3DTSS_COLORARG1, D3DTA_TEXTURE);
@@ -200,11 +201,6 @@ void ImGui_ImplDX8_RenderDrawData(ImDrawData* draw_data)
                 if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
                     continue;
 
-                // Apply Scissor/clipping rectangle, Bind texture, Draw
-                const RECT r = { (LONG)clip_min.x, (LONG)clip_min.y, (LONG)clip_max.x, (LONG)clip_max.y };
-                const LPDIRECT3DTEXTURE8 texture = (LPDIRECT3DTEXTURE8)pcmd->GetTexID();
-                bd->pd3dDevice->SetTexture(0, texture);
-             
                 CUSTOMVERTEX* vtx_dst;
                 ImDrawIdx* idx_dst;
                 if (bd->pVB->Lock(0, (UINT)(draw_data->TotalVtxCount * sizeof(CUSTOMVERTEX)), (BYTE**)&vtx_dst, D3DLOCK_DISCARD) < 0)
@@ -244,11 +240,24 @@ void ImGui_ImplDX8_RenderDrawData(ImDrawData* draw_data)
                 bd->pVB->Unlock();
                 bd->pIB->Unlock();
 
+
+                // Apply Scissor/clipping rectangle, Bind texture, Draw
+                float leftPlane[4]   = { 1.0f, 0.0f, 0.0f, clip_min.x };
+                float rightPlane[4]  = { -1.0f, 0.0f, 0.0f, clip_max.x };
+                float topPlane[4]    = { 0.0f, 1.0f, 0.0f, clip_min.y };
+                float bottomPlane[4] = { 0.0f, -1.0f, 0.0f, clip_max.y };
+
+                bd->pd3dDevice->SetClipPlane(0, leftPlane);
+                bd->pd3dDevice->SetClipPlane(1, rightPlane);
+                bd->pd3dDevice->SetClipPlane(2, topPlane);
+                bd->pd3dDevice->SetClipPlane(3, bottomPlane);
+                
                 // Render the vertex buffer contents
+                const LPDIRECT3DTEXTURE8 texture = (LPDIRECT3DTEXTURE8)pcmd->GetTexID();
+                bd->pd3dDevice->SetTexture(0, texture);
                 bd->pd3dDevice->SetStreamSource(0, bd->pVB, sizeof(CUSTOMVERTEX));
                 bd->pd3dDevice->SetIndices(bd->pIB, 0); // 
                 bd->pd3dDevice->SetVertexShader(D3DFVF_CUSTOMVERTEX);
-
                 bd->pd3dDevice->DrawIndexedPrimitive(D3DPT_TRIANGLELIST, 0U, cmd_list->VtxBuffer.Size, 0U, pcmd->ElemCount / 3);
             }
         }
